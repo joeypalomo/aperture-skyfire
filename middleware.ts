@@ -51,9 +51,19 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Bad/stale auth cookies can make getUser() throw at the fetch layer
+  // (e.g., invalid JWT shape from a prior failed session). Treat any
+  // failure here as "no user" and let the route render its
+  // unauthenticated state, rather than crashing middleware and
+  // returning MIDDLEWARE_INVOCATION_FAILED for the whole site.
+  let user: { email?: string } | null = null;
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  } catch (err) {
+    console.warn("[middleware] auth.getUser failed:", err instanceof Error ? err.message : String(err));
+    user = null;
+  }
 
   const path = request.nextUrl.pathname;
   const isAdminRoute =

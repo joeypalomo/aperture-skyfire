@@ -9,14 +9,20 @@ import { buildSystemPrompt } from "@/lib/system-prompt/build";
 import {
   appendApertureMessage,
   appendIntervieweeMessage,
+  collectExtractedTerms,
   listMessages,
   nextTurnIndex,
   toAnthropicMessages,
+  updateMessageExtraction,
+  updateMessageRetrievalChunks,
 } from "@/lib/messages";
 import {
   getAnthropicClient,
   APERTURE_CONVERSATION_MODEL,
 } from "@/lib/anthropic";
+import { extractEntitiesAndNumbers } from "@/lib/extraction";
+import { scoreInterviewteeTurn, scoreResultToInsert } from "@/lib/scoring";
+import { lookupChunks, renderRetrievedContextBlock } from "@/lib/retrieval";
 
 /**
  * Compute the verbatim A7 §VI opening for a given display name.
@@ -52,7 +58,6 @@ export async function startConversation(formData: FormData) {
 
   const session = result.session;
   if (session.status !== "invited") {
-    // Already started; just route to the chat surface.
     redirect(`/i/${token}/chat`);
   }
 
@@ -87,13 +92,8 @@ export async function startConversation(formData: FormData) {
     elapsedSeconds: 0,
   });
 
-  // Invalidate the Next.js cache for both routes before redirecting.
-  // Without this, the destination /chat can be served from stale RSC
-  // cache that still sees status='invited', and the old defensive
-  // bounce-back logic created an infinite loop.
   revalidatePath(`/i/${token}`);
   revalidatePath(`/i/${token}/chat`);
-
   redirect(`/i/${token}/chat`);
 }
 
@@ -105,18 +105,28 @@ const ACTIVE_STATUSES = [
 ] as const;
 
 /**
- * Interviewee submits a message. Persists it, calls Anthropic with
- * the full A7 system prompt + conversation history, persists the
- * reply, revalidates the chat route.
+ * Interviewee submits a message. Persists it, runs the three-layer
+ * knowledge pipeline (Layer 1 working memory in system prompt + Layer
+ * 2 retrieval from BI Brief chunks + Layer 3 background scoring),
+ * calls Anthropic Opus 4.7 for the reply, persists scorecard +
+ * extracted entities, revalidates the chat route.
  *
- * Step 4 simplifications:
+ * Pipeline:
+ *   1. Insert user message (turn N).
+ *   2. Build retrieved-context block from prior turns' entities (Layer 2).
+ *   3. Fire 3 calls in parallel:
+ *        - Opus 4.7 reply (Layer 1 + Layer 2 in prompt)
+ *        - Haiku 4.5 extraction on this turn's user text
+ *        - Haiku 4.5 scoring of (prior_agent_question, this_user_answer)
+ *   4. Persist agent reply (turn N+1), update user message with
+ *      extracted entities, insert scorecard row.
+ *   5. Revalidate.
+ *
+ * Step 4 simplifications still in effect at Step 5:
  *   - aperture_event_type defaults to 'question_primary' for every
- *     agent reply. Step 6 adds structured classification.
- *   - No probe-down enforcement, no scorecard write, no Layer 2
- *     retrieval. The system prompt's instructions cover behavior;
- *     code-side enforcement comes in Steps 5-6.
- *   - Status doesn't auto-advance (warm/core/closing). Step 6 wires
- *     the state machine using event_type classification.
+ *     agent reply (Step 6 adds structured classification).
+ *   - No probe-down enforcement, no status state-machine advance
+ *     (Step 6).
  */
 export async function sendMessage(formData: FormData) {
   const token = formData.get("token");
@@ -125,7 +135,6 @@ export async function sendMessage(formData: FormData) {
     throw new Error("sendMessage: missing token");
   }
   if (typeof text !== "string" || text.trim().length === 0) {
-    // Empty submission — no-op.
     return;
   }
 
@@ -137,7 +146,11 @@ export async function sendMessage(formData: FormData) {
   }
 
   const session = result.session;
-  if (!ACTIVE_STATUSES.includes(session.status as (typeof ACTIVE_STATUSES)[number])) {
+  if (
+    !ACTIVE_STATUSES.includes(
+      session.status as (typeof ACTIVE_STATUSES)[number],
+    )
+  ) {
     redirect(`/i/${token}/chat`);
   }
 
@@ -149,29 +162,65 @@ export async function sendMessage(formData: FormData) {
   const intervieweeTurnIndex = await nextTurnIndex(session.id);
   const intervieweeElapsed = Math.floor((Date.now() - startedAtMs) / 1000);
 
-  await appendIntervieweeMessage({
+  const userMessageRow = await appendIntervieweeMessage({
     sessionId: session.id,
     turnIndex: intervieweeTurnIndex,
     text: trimmed,
     elapsedSeconds: intervieweeElapsed,
   });
 
-  // Build conversation history for Anthropic. Include the just-saved
-  // interviewee message by re-loading from DB.
+  // Build conversation history (includes the just-saved user message).
   const history = await listMessages(session.id);
   const anthropicMessages = toAnthropicMessages(history);
 
-  const systemPrompt = buildSystemPrompt(session);
+  // Identify the prior agent question for scoring context. The
+  // immediately preceding aperture message is what the user is
+  // responding to.
+  const priorAgentText = (() => {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const m = history[i];
+      if (m && m.speaker === "aperture") return m.text;
+    }
+    return null;
+  })();
 
-  const anthropic = getAnthropicClient();
-  const response = await anthropic.messages.create({
-    model: APERTURE_CONVERSATION_MODEL,
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages: anthropicMessages,
+  // Layer 2 retrieval: aggregate entities/numbers from all prior
+  // interviewee turns and look up matching BI Brief chunks. This
+  // turn's entities aren't included yet (they'll be extracted in
+  // parallel and inform the NEXT turn's retrieval).
+  const accumulatedTerms = collectExtractedTerms(history);
+  const retrieval = lookupChunks(
+    accumulatedTerms.entities,
+    accumulatedTerms.numbers,
+    3,
+  );
+  const retrievedContextBlock = renderRetrievedContextBlock(retrieval.chunks);
+
+  const systemPrompt = buildSystemPrompt(session, {
+    retrievedContextBlock,
   });
 
-  const replyText = response.content
+  const anthropic = getAnthropicClient();
+
+  // Fire all three model calls in parallel. Extraction + scoring are
+  // background work that doesn't block the user's reply, but we await
+  // them here so the next page render has the updated rows.
+  const [opusResponse, extraction, scoring] = await Promise.all([
+    anthropic.messages.create({
+      model: APERTURE_CONVERSATION_MODEL,
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: anthropicMessages,
+    }),
+    extractEntitiesAndNumbers(trimmed),
+    scoreInterviewteeTurn({
+      intervieweeText: trimmed,
+      priorAgentQuestion: priorAgentText,
+      questionId: null,
+    }),
+  ]);
+
+  const replyText = opusResponse.content
     .filter((block): block is Extract<typeof block, { type: "text" }> =>
       block.type === "text",
     )
@@ -184,23 +233,49 @@ export async function sendMessage(formData: FormData) {
   }
 
   const replyElapsed = Math.floor((Date.now() - startedAtMs) / 1000);
-  const supabase = getServiceRoleClient();
 
-  await appendApertureMessage({
+  // Persist agent reply. retrieval_chunks_used records which Brief
+  // chunks Aperture saw silently for this turn — audit trail for
+  // synthesis QA.
+  const agentMessageRow = await appendApertureMessage({
     sessionId: session.id,
     turnIndex: intervieweeTurnIndex + 1,
     text: replyText,
-    // Step 4 default — Step 6 adds proper classification (warm,
-    // question_primary, probe_down, acknowledgment, closing_question,
-    // final_line, etc.)
     eventType: "question_primary",
     elapsedSeconds: replyElapsed,
   });
 
-  await supabase
-    .from("sessions")
-    .update({ last_activity_at: new Date().toISOString() })
-    .eq("id", session.id);
+  // Persist Layer 2 + Layer 3 side-effects in parallel.
+  const supabase = getServiceRoleClient();
+  await Promise.all([
+    updateMessageExtraction({
+      messageId: userMessageRow.id,
+      entities: extraction.entities,
+      numbers: extraction.numbers,
+    }),
+    updateMessageRetrievalChunks({
+      messageId: agentMessageRow.id,
+      chunkIds: retrieval.chunkIds,
+    }),
+    scoring
+      ? supabase.from("scorecards").insert(
+          scoreResultToInsert(scoring, {
+            sessionId: session.id,
+            // Step 5 placeholder — Step 6 wires real per-stakeholder
+            // question routing. Use the driving message id so the
+            // scorecard row is uniquely keyed to the answer it
+            // scored.
+            questionId: `TURN_${intervieweeTurnIndex}`,
+            drivingMessageId: userMessageRow.id,
+            elapsedSeconds: intervieweeElapsed,
+          }),
+        )
+      : Promise.resolve(),
+    supabase
+      .from("sessions")
+      .update({ last_activity_at: new Date().toISOString() })
+      .eq("id", session.id),
+  ]);
 
   revalidatePath(`/i/${token}/chat`);
 }

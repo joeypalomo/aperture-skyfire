@@ -1,0 +1,125 @@
+{
+  "_comment": "Layer 2 retrieval base. Chunked from Phase 1 Artifact 2 (BI Brief) per A6 §A.1.2. Loaded into memory at server start; matched against extracted entities + numbers per A6 §A.2 triggers. Step 5 ships a curated subset (most-likely-to-be-mentioned content); Step 9 polish can expand if dry-run shows retrieval gaps.",
+  "chunks": [
+    {
+      "chunk_id": "BC_HAKAI_STALLED_POOL",
+      "source_section": "A2 §7 — Sales Practice / The stalled-deal pool",
+      "summary": "$20–30M+ of Hakai BC pipeline stalled 8–16 months at the 40% Qualified stage. Named deals include Calgary Stampede Big Four ($888K, 14mo), Precon Manufacturing ($826K, 16mo), DIRTT ($635K, 14mo), Garibaldi Glass ($2M, 10mo), Allen Town ($1M, 8mo), Westfine Meats ($1.2M, 5mo), Bonnybrook ($505K), City of Airdrie Twin Arenas ($650K, 14mo). Pre-acquisition Hakai had no documented qualification discipline.",
+      "entities_indexed": {
+        "accounts": ["Calgary Stampede Big Four", "Precon Manufacturing", "DIRTT", "Garibaldi Glass", "Allen Town", "Westfine Meats", "Bonnybrook", "City of Airdrie Twin Arenas", "Twin Arenas", "Airdrie"],
+        "people": ["Jason Jackson", "Rob MacInnis"],
+        "numbers": ["$888K", "$826K", "$635K", "$2M", "$1M", "$1.2M", "$505K", "$650K", "$20-30M", "14 months", "16 months", "10 months", "8 months", "5 months", "40%", "8-16 months"],
+        "segments": ["Hakai BC"],
+        "constraints_referenced": ["C6"]
+      }
+    },
+    {
+      "chunk_id": "BC_HUBSPOT_AUDIT",
+      "source_section": "A2 §5 + §7 — HubSpot portal state, May 8 audit findings",
+      "summary": "May 8 HubSpot audit: 8,842 open deals reported; 7,285 attributed to Stacy Haakonson by Dec 2024 migration default; only 1,367 (15.5%) owned by an active sales team member. 41,938 total contacts. 0 contacts ever enrolled in a HubSpot sequence. 25–30 Salesforce-era properties to archive. 94% of open deals untouched 30 days. Forecast overstatement $5–12M/qtr. Pipelines: Utility-Scale (50% at Qualified vs. 3–8% actual), Hakai BC ID 667712064 (60% at Qualified vs. 30–35% actual; stage ID 979641939 holds $20–30M+ stalled), Commercial Rooftop (incomplete stage architecture). No Site Assessed stage. February 19, 2025 mass-stage-update broke time-in-stage calculations.",
+      "entities_indexed": {
+        "accounts": [],
+        "people": ["Stacy Haakonson", "Greg Sauer", "David Vonesch", "Curtis Buxton"],
+        "numbers": ["8,842", "7,285", "41,938", "1,367", "15.5%", "94%", "$5-12M", "$5–12M", "667712064", "979641939", "50%", "60%", "3-8%", "30-35%", "May 8", "Feb 19", "December 2024", "25-30", "0"],
+        "segments": ["Utility-Scale", "Hakai BC", "Commercial Rooftop"],
+        "constraints_referenced": ["C1", "C2", "C4", "C5"]
+      }
+    },
+    {
+      "chunk_id": "BC_GREG_BOTTLENECK",
+      "source_section": "A2 §7 — Per-rep activity / Greg single-threading",
+      "summary": "Greg Sauer owns 301 open deals personally. 90-day activity: 192 calls, 3,084 emails, 7 tasks (440:1 email-to-task ratio). 112 of his deals (37%) untouched in 30 days. May 11 reorg sheet frustrations tab explicitly names: 'consulting siloed w/ Greg.' Greg's own quote May 8: 'We're paying for something we're not using.' The C&I sales bench (Bryce, Rob MacInnis, Robert Silver, Matt Simard) has no system-level visibility into Greg's deal load.",
+      "entities_indexed": {
+        "accounts": [],
+        "people": ["Greg Sauer", "Bryce Hayes", "Rob MacInnis", "Robert Silver", "Matt Simard"],
+        "numbers": ["301", "192", "3,084", "7", "440:1", "112", "37%"],
+        "segments": [],
+        "constraints_referenced": ["C3"]
+      }
+    },
+    {
+      "chunk_id": "BC_FORECAST_PROBABILITIES",
+      "source_section": "A2 §7 — Forecast overstatement",
+      "summary": "Stage probabilities are residential-era and structurally overstate pipeline by $5–12M per quarter. Worked example: $30M+ at Hakai BC 60% = $18M weighted today, but calibrated to actual 30–35% conversion weights to $9–10.5M ($7–9M overstatement on Hakai alone). Utility-Scale 50% configured vs. actual 3–8% RFP win rate (25–35 pts overstated). David Vonesch runs a manual quarterly forecasting cycle, polling each rep individually because he can't trust the HubSpot number. 30-Day Action #5: recalibrate stage probabilities against actual win rates by June 5.",
+      "entities_indexed": {
+        "accounts": [],
+        "people": ["David Vonesch", "Greg Sauer"],
+        "numbers": ["$5-12M", "$5–12M", "$30M", "$18M", "$9-10.5M", "$7-9M", "30-35%", "3-8%", "50%", "60%", "25-35", "June 5"],
+        "segments": ["Utility-Scale", "Hakai BC"],
+        "constraints_referenced": ["C4"]
+      }
+    },
+    {
+      "chunk_id": "BC_SEGMENTS_UNTAGGED",
+      "source_section": "A2 §6 + §9 — Segment tagging gap",
+      "summary": "96.3% of 18,853 companies in the database have no industry tag — segment-level win rate, deal velocity, and pipeline coverage cannot be reported today. SkyFire's own $12.15M 2026 C&I target is split by geography (YYC $9.86M / YEG $1.24M / YLW $1.04M), not by segment. Only 4 of 15+ named segments have GA4 audiences (Residential 17,546 / Commercial 12,950 / Agriculture 93 / First Nations 5). No audience configured for REIT, cold storage, mining, cannabis, data centres, military, IPP, aerospace, wilderness lodging, multi-family builders, or general/electrical contractors. 30-Day Action #3 builds company_segment field + 18-option picklist + top-500 backfill by May 28.",
+      "entities_indexed": {
+        "accounts": [],
+        "people": ["Stacy Haakonson", "Greg Sauer", "Jarek Soltys", "Curtis Buxton"],
+        "numbers": ["96.3%", "18,853", "$12.15M", "$9.86M", "$1.24M", "$1.04M", "17,546", "12,950", "93", "5", "15+", "500", "May 28"],
+        "segments": ["REIT", "cold storage", "mining", "cannabis", "data centres", "military", "IPP", "aerospace", "wilderness lodging", "multi-family builders", "general contractors", "electrical contractors", "industrial", "First Nations", "agriculture"],
+        "constraints_referenced": ["C5"]
+      }
+    },
+    {
+      "chunk_id": "BC_STINGRAY_ATTRIBUTION",
+      "source_section": "A2 §6 — Stingray paid social + attribution loop",
+      "summary": "GA4 Jan 1 – May 16, 2026: Paid Other channel (overwhelmingly paid_social_stingray) — 6,467 sessions, 7 key events, 0.11% conversion rate. Same window Organic Search: 8,187 sessions, 1,048 key events, 12.80% rate. The Qualified leads and Converted leads GA4 metrics read 0 across every week from 0000 through 0019 of 2026 YTD. C&I Marketing Strategy doc references Stingray Connect as the digital ad partner with weekly tweaks and ongoing A/B testing — assumes Stingray is delivering against KPI; the data says otherwise. Stingray monthly spend not visible in project files; typical paid-social retainer plus ad-spend ~CAD $5–15K/month.",
+      "entities_indexed": {
+        "accounts": ["Stingray", "Stingray Connect", "paid_social_stingray"],
+        "people": ["Stacy Haakonson", "Amanda Schewaga"],
+        "numbers": ["6,467", "7", "0.11%", "8,187", "1,048", "12.80%", "$5-15K", "20 weeks", "0", "Jan 1", "May 16"],
+        "segments": [],
+        "constraints_referenced": ["C7"]
+      }
+    },
+    {
+      "chunk_id": "BC_HAKAI_ACQUISITION",
+      "source_section": "A2 §1 + §3 — Hakai acquisition and integration",
+      "summary": "Hakai Energy Solutions acquired January 1, 2026. 15-year-old company based on Vancouver Island. Pre-acquisition CEO Jason Jackson now EVP Strategy & Business Development at SkyFire. Headcount post-acquisition ~200 (up from ~97 pre-acquisition). Hakai BC pipeline (HubSpot ID 667712064) holds 3,641 deals, largest single deal NRStor Natuashish at $40M. Hakai C&I integration: 2 on C&I side (Rob MacInnis provisioned May 4 with sales-pro seat + Project Director title; Jason Jackson), 3–4 on residential side (Alexandra Poepl, Piers Bonifant, Chris Den Tandt provisioned May 7). Hakai's BC capability is hybrid AC-coupled, off-grid and microgrid systems for remote communities; Calvert Island Ecological Observatory was the reference project from 2010 onward. Curtis Buxton creating Hakai BC team in HubSpot by May 14.",
+      "entities_indexed": {
+        "accounts": ["Hakai", "Hakai Energy Solutions", "NRStor Natuashish", "Calvert Island", "Calvert Island Ecological Observatory", "Hakai Institute"],
+        "people": ["Jason Jackson", "Rob MacInnis", "Alexandra Poepl", "Piers Bonifant", "Chris Den Tandt", "Curtis Buxton"],
+        "numbers": ["January 1", "Jan 1", "2026", "15-year", "200", "97", "3,641", "$40M", "May 4", "May 7", "May 14", "2010"],
+        "segments": ["Hakai BC", "off-grid", "microgrid", "remote communities"],
+        "constraints_referenced": ["C6"]
+      }
+    },
+    {
+      "chunk_id": "BC_COMPANY_HISTORY",
+      "source_section": "A2 §1 — Company architecture",
+      "summary": "SkyFire Energy Inc. 25-year-old solar EPC and O&M firm. HQ 4038A 7 Street SE, Calgary, AB T2G 2Y8. First install (Alberta's third grid-tied) by David Kelly in 2001 under Sedmek Inc. Formally incorporated as SkyFire Energy in 2008 by David Kelly, Tim Schulhauser, David Vonesch. Offices: Calgary HQ, Edmonton, Regina, West Kelowna. Post-Hakai (Jan 1 2026): Vancouver Island (Comox/Cumberland), Vancouver coastal, Victoria. Employee-owned via ESOP since 2018. B Corp recertification 103.7 vs. median 50.9. Other certifications: COR, Climate Smart (since 2019), Amicus Solar Cooperative (first non-US member 2016), Tesla Powerwall Certified Installer, Leadership Accord on Gender Diversity. CEO David Vonesch on CanREA board. 250+ MWp PV installed; 8,500+ grid-connected systems; 2+ GWp serviced under O&M (230+ MWp under full-scope O&M contract). 8 provinces/territories. 20+ Canadian utility partners.",
+      "entities_indexed": {
+        "accounts": [],
+        "people": ["David Kelly", "Tim Schulhauser", "David Vonesch"],
+        "numbers": ["2001", "2008", "2018", "2019", "2016", "103.7", "50.9", "250+ MWp", "8,500+", "2+ GWp", "230+ MWp", "8", "20+", "25-year"],
+        "segments": ["ESOP", "B Corp", "Climate Smart", "Amicus Solar", "CanREA"],
+        "constraints_referenced": []
+      }
+    },
+    {
+      "chunk_id": "BC_COMPETITIVE_LANDSCAPE",
+      "source_section": "A2 §8 — Competitive landscape and positioning",
+      "summary": "Named competitor set from SkyFire's own C&I Marketing Strategy doc: Alberta — Kuby, Rocky Mountain Solar, Altapro. BC — Inferno, Altapro, IPS. Utility-scale — Borea, GP Joule, PCL. Broader Western Canada (per master dossier): Polaron Solartech (Toronto, residential-heavy, 12,500+ installs), Kuby Renewable Energy (Edmonton, 47–55 employees, closest AB C&I rival), EVOLVsolar (Calgary/Edmonton), Great Canadian Solar (Edmonton), Solvest Inc. (Whitehorse, 65–72 employees, northern/remote/mining specialty).",
+      "entities_indexed": {
+        "accounts": ["Kuby", "Kuby Renewable Energy", "Rocky Mountain Solar", "Altapro", "Inferno", "IPS", "Borea", "GP Joule", "PCL", "Polaron", "Polaron Solartech", "EVOLVsolar", "EVOLV", "Great Canadian Solar", "Solvest", "Solvest Inc"],
+        "people": [],
+        "numbers": ["12,500+", "47-55", "65-72"],
+        "segments": ["residential", "C&I", "utility-scale", "Alberta", "BC"],
+        "constraints_referenced": []
+      }
+    },
+    {
+      "chunk_id": "BC_THIRTY_DAY_PLAN",
+      "source_section": "A2 §10 — What's already been decided / 30-day plan",
+      "summary": "Five 30-Day Plan actions approved at the May 8 sync: (1) Reassign Stacy's 7,285 deals — Curtis Buxton — May 21. (2) Sweep 8,000 overdue close dates — Greg + rep delegation — May 28. (3) Build company_segment field + 18-option picklist + top-500 backfill — Joey (build) + Curtis (deploy) + Greg/segment directors (validate) — May 28. (4) Move Robert Silver to All C&I Sales team; create Hakai BC team — Curtis — May 14. (5) Recalibrate stage probabilities against actual win rates — Joey (analysis) + Curtis (configure) — June 5. Implicit sixth: Joey produces property-cleanup how-to guide; Curtis + James McPhail execute in-house. SOW: Option B, $9,900/month × 4 months = $39,600, May 1 – August 31. June 9–10 Bragg Creek C&I Sales Retreat confirmed.",
+      "entities_indexed": {
+        "accounts": [],
+        "people": ["Stacy Haakonson", "Curtis Buxton", "Greg Sauer", "Robert Silver", "Joey Palomo", "James McPhail"],
+        "numbers": ["7,285", "8,000", "500", "May 21", "May 28", "May 14", "June 5", "$9,900", "$39,600", "May 1", "August 31", "June 9-10", "30-Day", "30-day"],
+        "segments": ["Hakai BC"],
+        "constraints_referenced": ["C1", "C4", "C5"]
+      }
+    }
+  ]
+}

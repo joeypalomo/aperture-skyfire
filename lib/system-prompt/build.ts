@@ -27,13 +27,22 @@ import { buildSection7 } from "./question-library";
 
 type SessionRow = Database["public"]["Tables"]["sessions"]["Row"];
 
+interface BuildOptions {
+  /** Optional Layer 2 retrieved-context block (lib/retrieval.ts).
+   *  Appended after Section VIII when provided. Step 5+. */
+  retrievedContextBlock?: string;
+}
+
 /**
  * Build the full system prompt string ready to pass as Anthropic's
  * `system` parameter. Errors thrown if the interviewee_id isn't in
  * the registry — that would be a config bug, not a runtime condition
  * we recover from.
  */
-export function buildSystemPrompt(session: SessionRow): string {
+export function buildSystemPrompt(
+  session: SessionRow,
+  options: BuildOptions = {},
+): string {
   const config = getInterviewee(session.interviewee_id);
   if (!config) {
     throw new Error(
@@ -44,7 +53,7 @@ export function buildSystemPrompt(session: SessionRow): string {
   const section3 = buildSection3(config);
   const section7 = buildSection7(config);
 
-  return [
+  const sections: string[] = [
     SECTION_HEADER,
     SECTION_I,
     SECTION_II,
@@ -54,6 +63,16 @@ export function buildSystemPrompt(session: SessionRow): string {
     SECTION_VI,
     section7,
     SECTION_VIII,
+  ];
+
+  // Layer 2 retrieved context slots in directly after Section VIII —
+  // it's a runtime annotation of the always-on knowledge-base-access
+  // rules in §VIII.
+  if (options.retrievedContextBlock && options.retrievedContextBlock.length > 0) {
+    sections.push(options.retrievedContextBlock);
+  }
+
+  sections.push(
     SECTION_IX,
     SECTION_X,
     SECTION_XI,
@@ -62,5 +81,7 @@ export function buildSystemPrompt(session: SessionRow): string {
     SECTION_XIV,
     SECTION_XV,
     SECTION_XVI,
-  ].join("\n\n");
+  );
+
+  return sections.join("\n\n");
 }

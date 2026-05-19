@@ -123,3 +123,72 @@ export function toAnthropicMessages(
     content: m.text,
   }));
 }
+
+/**
+ * Update an interviewee message row with extracted entities + numbers
+ * after the background Haiku extractor runs. No-op if the extractor
+ * returned empty arrays.
+ */
+export async function updateMessageExtraction(args: {
+  messageId: string;
+  entities: string[];
+  numbers: string[];
+}): Promise<void> {
+  if (args.entities.length === 0 && args.numbers.length === 0) return;
+  const supabase = getServiceRoleClient();
+  const { error } = await supabase
+    .from("messages")
+    .update({
+      entities_mentioned: args.entities,
+      numbers_mentioned: args.numbers,
+    })
+    .eq("id", args.messageId);
+  if (error) {
+    console.error(
+      "[messages] updateMessageExtraction failed:",
+      error.message,
+    );
+  }
+}
+
+/**
+ * Stamp an Aperture message with which Layer 2 chunk IDs informed
+ * its content. Audit trail for the synthesis (Step 8) and dry-run
+ * QA.
+ */
+export async function updateMessageRetrievalChunks(args: {
+  messageId: string;
+  chunkIds: string[];
+}): Promise<void> {
+  if (args.chunkIds.length === 0) return;
+  const supabase = getServiceRoleClient();
+  const { error } = await supabase
+    .from("messages")
+    .update({ retrieval_chunks_used: args.chunkIds })
+    .eq("id", args.messageId);
+  if (error) {
+    console.error(
+      "[messages] updateMessageRetrievalChunks failed:",
+      error.message,
+    );
+  }
+}
+
+/**
+ * Aggregate all entities and numbers extracted across every prior
+ * interviewee turn in a session — used to seed Layer 2 retrieval for
+ * the next agent reply.
+ */
+export function collectExtractedTerms(messages: MessageRow[]): {
+  entities: string[];
+  numbers: string[];
+} {
+  const entities = new Set<string>();
+  const numbers = new Set<string>();
+  for (const m of messages) {
+    if (m.speaker !== "interviewee") continue;
+    for (const e of m.entities_mentioned) entities.add(e);
+    for (const n of m.numbers_mentioned) numbers.add(n);
+  }
+  return { entities: [...entities], numbers: [...numbers] };
+}

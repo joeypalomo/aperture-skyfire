@@ -1,4 +1,4 @@
-// Edge middleware. Lightweight by design — only gates /admin/* behind
+// Edge middleware v2. Lightweight by design — only gates /admin/* behind
 // the presence of a Supabase auth cookie. We deliberately do NOT
 // import @supabase/ssr here: that library has Edge-runtime
 // incompatibilities (it pulls in something that references Node's

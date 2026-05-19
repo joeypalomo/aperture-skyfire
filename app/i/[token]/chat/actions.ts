@@ -87,6 +87,13 @@ export async function startConversation(formData: FormData) {
     elapsedSeconds: 0,
   });
 
+  // Invalidate the Next.js cache for both routes before redirecting.
+  // Without this, the destination /chat can be served from stale RSC
+  // cache that still sees status='invited', and the old defensive
+  // bounce-back logic created an infinite loop.
+  revalidatePath(`/i/${token}`);
+  revalidatePath(`/i/${token}/chat`);
+
   redirect(`/i/${token}/chat`);
 }
 

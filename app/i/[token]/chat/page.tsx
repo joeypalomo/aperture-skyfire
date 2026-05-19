@@ -30,11 +30,15 @@ export default async function ChatPage({ params }: ChatPageProps) {
 
   const session = result.session;
 
-  // If the user hasn't clicked Begin yet, bounce back to the welcome
-  // page where the Begin form lives.
-  if (session.status === "invited") {
-    redirect(`/i/${params.token}`);
-  }
+  // Status check: we used to redirect status='invited' back to the
+  // welcome page, but that created a stale-cache bounce loop after the
+  // Begin click (the welcome page redirects identifying→/chat, and a
+  // cached /chat reading 'invited' bounced back). Just render the
+  // chat surface for any session resolution that finds a row. If
+  // someone navigates directly to /chat before clicking Begin, they
+  // see an empty transcript with the message form — harmless, since
+  // the session has no started_at yet and the sendMessage action
+  // checks for active status anyway.
 
   const config = getInterviewee(session.interviewee_id);
   const displayName =

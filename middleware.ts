@@ -32,24 +32,35 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
+  let supabase;
+  try {
+    supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value),
+          );
+          response = NextResponse.next({
+            request: { headers: request.headers },
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options),
+          );
+        },
       },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) =>
-          request.cookies.set(name, value),
-        );
-        response = NextResponse.next({
-          request: { headers: request.headers },
-        });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options),
-        );
-      },
-    },
-  });
+    });
+  } catch (err) {
+    // Malformed Supabase URL/anon-key envs can throw here. Don't crash
+    // the whole site; treat auth as unavailable and let the route render.
+    console.warn(
+      "[middleware] createServerClient threw:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return response;
+  }
 
   // Bad/stale auth cookies can make getUser() throw at the fetch layer
   // (e.g., invalid JWT shape from a prior failed session). Treat any
@@ -87,7 +98,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on everything except Next.js internals, favicon, and static assets
-    "/((?!_next/static|_next/image|favicon.ico|branding/).*)",
+    // Run on everything except Next.js internals, favicon, static assets,
+    // and the env-var diagnostic endpoint (which we use specifically to
+    // diagnose middleware crashes — chicken-and-egg if it ran through here).
+    "/((?!_next/static|_next/image|favicon.ico|branding/|api/debug-env-keys).*)",
   ],
 };

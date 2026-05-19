@@ -71,7 +71,16 @@ function formatTime(iso: string | null): string {
   });
 }
 
-export default async function AdminDashboard() {
+interface AdminDashboardProps {
+  searchParams: { error?: string };
+}
+
+export default async function AdminDashboard({
+  searchParams,
+}: AdminDashboardProps) {
+  const errorMessage = searchParams.error
+    ? decodeURIComponent(searchParams.error)
+    : null;
   const supabase = getServiceRoleClient();
   const { data: sessionRows } = await supabase
     .from("sessions")
@@ -94,6 +103,12 @@ export default async function AdminDashboard() {
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10 text-[14px] text-charcoal">
+      {errorMessage && (
+        <div className="mb-6 rounded border border-burnt bg-soft px-4 py-3 text-[12px] text-burnt">
+          <strong className="block font-medium">Action failed:</strong>
+          <code className="break-all">{errorMessage}</code>
+        </div>
+      )}
       <div className="mb-6 flex items-baseline justify-between">
         <h2 className="font-playfair text-3xl text-near">Cohort</h2>
         <p className="text-[12px] text-ash">

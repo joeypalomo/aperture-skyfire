@@ -1,0 +1,19 @@
+{
+  "name": "cme-event-platform-interviewer",
+  "version": "1.0.0",
+  "description": "CME Event Management Platform Requirements Interviewer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "archiver": "^7.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "nodemailer": "^7.0.11",
+    "pg": "^8.20.0"
+  }
+}

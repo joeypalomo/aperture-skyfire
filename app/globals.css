@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Brand tokens — Phase 2 Artifact 1 §9. Mirrored as CSS variables so
+   non-Tailwind contexts (email HTML, third-party widgets) can read them. */
+:root {
+  --color-navy: #256370;
+  --color-burnt: #d65e1d;
+  --color-near: #040406;
+  --color-charcoal: #2d2d2d;
+  --color-ash: #57514c;
+  --color-soft: #f9f9f9;
+  --color-silver: #c8c8c8;
+}
+
+html,
+body {
+  background-color: #ffffff;
+  color: var(--color-charcoal);
+  font-family: var(--font-dm-sans), "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+/* Body type spec — A1 §9: 60-75 chars per line, DM Sans Regular. */
+main {
+  font-size: 16px;
+  line-height: 1.55;
+}

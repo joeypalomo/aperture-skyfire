@@ -3,18 +3,21 @@
 //
 //   not_found / forged / shape-invalid  → wrong-link copy (edge 3.6)
 //   expired (past 30-day window)        → expired-link copy
-//   status='invited'                    → fresh welcome + A7 §VI verbatim
+//   status='invited'                    → welcome + verbatim opening + Begin button
 //   status in {identifying, warm, core,
-//              closing, paused}         → "session already started" pointer
+//              closing, paused}         → auto-redirect to /chat surface
 //   status='completed'                  → A7 §XIII post-close copy
 //   status='declined'/'abandoned'       → graceful close copy
 //
-// Step 3 ships the welcome screen statically — the chat surface and
-// real resume language land in Step 4. The Begin button on the
-// welcome screen is intentionally omitted until Step 4 wires it.
+// The verbatim A7 §VI opening is shown statically on this welcome
+// page so the interviewee can read it without committing. Clicking
+// Begin transitions the session to 'identifying' and routes to the
+// chat surface (Step 4).
 
+import { redirect } from "next/navigation";
 import { resolveToken } from "@/lib/tokens";
 import { getInterviewee } from "@/config/interviewees";
+import { startConversation } from "./chat/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +78,7 @@ export default async function IntakeTokenPage({ params }: PageProps) {
     );
   }
 
+  // Session already in flight — go straight to the chat surface.
   if (
     session.status === "identifying" ||
     session.status === "warm" ||
@@ -82,18 +86,11 @@ export default async function IntakeTokenPage({ params }: PageProps) {
     session.status === "closing" ||
     session.status === "paused"
   ) {
-    return (
-      <PageShell heading="Aperture">
-        <p className="font-playfair text-2xl text-near">
-          Welcome back, {displayName}.
-        </p>
-        <p>The chat surface ships in Step 4.</p>
-      </PageShell>
-    );
+    redirect(`/i/${params.token}/chat`);
   }
 
-  // status === 'invited' — fresh welcome with the A7 §VI verbatim opening.
-  // The chat surface and Begin button wire in Step 4.
+  // status === 'invited' — fresh welcome with the A7 §VI verbatim opening
+  // and the Begin button.
   return (
     <PageShell heading="Aperture">
       <p>
@@ -104,10 +101,15 @@ export default async function IntakeTokenPage({ params }: PageProps) {
         — and you can pause and pick back up anytime, even if it takes a
         few sittings. Your participation matters. Let&rsquo;s get started.
       </p>
-      <p className="text-[12px] italic text-ash">
-        Chat surface lands in Step 4 of the build. This welcome screen is
-        the static-render checkpoint for the verbatim opening above.
-      </p>
+      <form action={startConversation} className="pt-2">
+        <input type="hidden" name="token" value={params.token} />
+        <button
+          type="submit"
+          className="rounded border border-near bg-near px-5 py-2 text-[13px] text-soft hover:bg-burnt hover:border-burnt transition-colors"
+        >
+          Begin
+        </button>
+      </form>
     </PageShell>
   );
 }

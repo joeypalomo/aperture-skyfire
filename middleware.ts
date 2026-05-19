@@ -1,106 +1,57 @@
-// Edge middleware. Two responsibilities:
-//   1. Refresh the Supabase auth session cookie on every request so
-//      server components see up-to-date `user` state.
-//   2. Gate /admin/* (except /admin/login*) behind an authenticated
-//      session matching JOEY_ADMIN_EMAIL.
+// Edge middleware. Lightweight by design — only gates /admin/* behind
+// the presence of a Supabase auth cookie. We deliberately do NOT
+// import @supabase/ssr here: that library has Edge-runtime
+// incompatibilities (it pulls in something that references Node's
+// __dirname global, which is undefined in Edge and crashes the whole
+// middleware function — observed during Step 3 deploy as
+// "ReferenceError: __dirname is not defined" / MIDDLEWARE_INVOCATION_FAILED).
 //
-// Self-contained: does NOT import lib/env.ts because that module
-// throws if any required env var is missing, and middleware runs on
-// every request — a missing env var would brick the whole site. We
-// read process.env directly and handle the absent case as "deny."
+// Actual auth verification happens in app/admin/layout.tsx where Node
+// runtime is available and the full Supabase client works fine. The
+// cookie-presence check here is a fast-path redirect; if a cookie
+// exists, the layout still validates it server-side before showing
+// any admin content. A forged/expired cookie that gets past
+// middleware will be caught by the layout's getUser() call and the
+// user redirected anyway.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 
-export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: { headers: request.headers },
-  });
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const joeyAdminEmail = process.env.JOEY_ADMIN_EMAIL;
-
-  // If Supabase isn't configured we can't check auth — let the request
-  // through but block /admin to be safe.
-  if (!supabaseUrl || !supabaseAnonKey) {
-    if (request.nextUrl.pathname.startsWith("/admin")) {
-      return new NextResponse("Supabase auth is not configured.", {
-        status: 503,
-      });
-    }
-    return response;
-  }
-
-  let supabase;
-  try {
-    supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
-          );
-        },
-      },
-    });
-  } catch (err) {
-    // Malformed Supabase URL/anon-key envs can throw here. Don't crash
-    // the whole site; treat auth as unavailable and let the route render.
-    console.warn(
-      "[middleware] createServerClient threw:",
-      err instanceof Error ? err.message : String(err),
-    );
-    return response;
-  }
-
-  // Bad/stale auth cookies can make getUser() throw at the fetch layer
-  // (e.g., invalid JWT shape from a prior failed session). Treat any
-  // failure here as "no user" and let the route render its
-  // unauthenticated state, rather than crashing middleware and
-  // returning MIDDLEWARE_INVOCATION_FAILED for the whole site.
-  let user: { email?: string } | null = null;
-  try {
-    const result = await supabase.auth.getUser();
-    user = result.data.user;
-  } catch (err) {
-    console.warn("[middleware] auth.getUser failed:", err instanceof Error ? err.message : String(err));
-    user = null;
-  }
-
+export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+
+  // Only act on /admin/* routes, excluding the login surface itself.
   const isAdminRoute =
     path.startsWith("/admin") && !path.startsWith("/admin/login");
 
-  if (isAdminRoute) {
-    if (!user) {
-      const redirectUrl = new URL("/admin/login", request.url);
-      return NextResponse.redirect(redirectUrl);
-    }
-    if (joeyAdminEmail && user.email !== joeyAdminEmail) {
-      // Authenticated but wrong identity — sign them out and redirect.
-      await supabase.auth.signOut();
-      const redirectUrl = new URL("/admin/login?error=unauthorized", request.url);
-      return NextResponse.redirect(redirectUrl);
-    }
+  if (!isAdminRoute) {
+    return NextResponse.next();
   }
 
-  return response;
+  // Supabase Auth stores session cookies named like
+  // `sb-<project-ref>-auth-token` (and sometimes split into multiple
+  // chunks with .0, .1 suffixes for large sessions). If ANY such
+  // cookie is present we let the request through and the layout
+  // does the real validation.
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some(
+      (c) =>
+        c.name.startsWith("sb-") &&
+        (c.name.endsWith("-auth-token") ||
+          c.name.includes("-auth-token.")),
+    );
+
+  if (!hasAuthCookie) {
+    return NextResponse.redirect(new URL("/admin/login", request.url));
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: [
     // Run on everything except Next.js internals, favicon, static assets,
-    // and the env-var diagnostic endpoint (which we use specifically to
-    // diagnose middleware crashes — chicken-and-egg if it ran through here).
+    // and the env-var diagnostic endpoint.
     "/((?!_next/static|_next/image|favicon.ico|branding/|api/debug-env-keys).*)",
   ],
 };

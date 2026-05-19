@@ -15,14 +15,19 @@ interface MessageFormProps {
 
 export function MessageForm({ token, disabled = false }: MessageFormProps) {
   return (
-    <form action={sendMessage} className="mt-10 space-y-3">
+    <form action={sendMessage} className="mt-6 space-y-3">
       <input type="hidden" name="token" value={token} />
       <textarea
         name="text"
-        rows={4}
+        rows={3}
         required
         disabled={disabled}
-        placeholder={disabled ? "Session ended." : "Type your reply…"}
+        placeholder={
+          disabled
+            ? "Session ended."
+            : "Type your reply here, then click Send to continue."
+        }
+        autoFocus={!disabled}
         className="w-full rounded border border-silver bg-white px-3 py-2 text-[14px] leading-body text-charcoal focus:border-navy focus:outline-none disabled:bg-soft disabled:cursor-not-allowed"
       />
       <div className="flex justify-end">

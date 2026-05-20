@@ -43,7 +43,8 @@ function buildOpeningText(displayName: string): string {
     `ask you a few questions to help build a shared picture of how ` +
     `the commercial sales engine works today. About 15 minutes — and ` +
     `you can pause and pick back up anytime, even if it takes a few ` +
-    `sittings. Your participation matters. Let's get started.`
+    `sittings. Your participation matters. Let's get started.\n\n` +
+    `PLEASE TYPE START IN THE TEXT BOX TO LAUNCH`
   );
 }
 

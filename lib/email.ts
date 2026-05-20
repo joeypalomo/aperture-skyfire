@@ -160,6 +160,57 @@ export async function sendStartNotification(
   }
 }
 
+// ---- declination notification ---------------------------------------
+
+/**
+ * Notify Joey that an interviewee declined the intake (A8 edge 3.3).
+ * No transcript, no synthesis — the intake did not run. Best-effort.
+ */
+export async function sendDeclineNotification(
+  session: SessionRow,
+  declineText: string,
+): Promise<EmailResult> {
+  try {
+    const name = session.interviewee_full_name;
+    const when =
+      new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC";
+    const subject = `Aperture intake declined — ${name} — ${when.slice(0, 10)}`;
+    const lead = `${name} (${session.interviewee_display_name}) declined the Aperture intake.`;
+    const meta = [
+      `Interviewee ID:  ${session.interviewee_id}`,
+      `Declined at:     ${when}`,
+      `They said:       "${declineText}"`,
+    ].join("\n");
+    const tail =
+      "No transcript or synthesis — the intake did not run. Reach out directly if you'd like to follow up.";
+
+    const text = `${lead}\n\n${meta}\n\n${tail}\n`;
+    const html =
+      `<div style="font-family:-apple-system,Segoe UI,Helvetica,sans-serif;color:#1a1a1a;max-width:640px">` +
+      emailBrandHeader() +
+      `<p>${escapeHtml(lead)}</p>` +
+      `<pre style="font:13px/1.6 ui-monospace,Menlo,monospace;background:#f5f5f3;padding:12px 14px;border-radius:6px">${escapeHtml(meta)}</pre>` +
+      `<p style="color:#666;font-size:13px">${escapeHtml(tail)}</p>` +
+      emailBrandFooter() +
+      `</div>`;
+
+    const { data, error } = await getResend().emails.send({
+      from: fromAddress(),
+      to: TRANSCRIPT_RECIPIENT,
+      subject,
+      text,
+      html,
+    });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, id: data?.id };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 // ---- completion email -----------------------------------------------
 
 function buildCompletionEmail(

@@ -30,7 +30,16 @@ import {
   RESUME_GAP_SECONDS,
   RESUME_CONTEXT_BLOCK,
 } from "@/lib/pause";
-import { sendStartNotification, sendCompletionEmail } from "@/lib/email";
+import { detectDeclineSignal, DECLINE_LINE } from "@/lib/decline";
+import {
+  detectContradiction,
+  contradictionResultToInsert,
+} from "@/lib/contradictions";
+import {
+  sendStartNotification,
+  sendCompletionEmail,
+  sendDeclineNotification,
+} from "@/lib/email";
 
 /**
  * Compute the verbatim A7 §VI opening for a given display name.
@@ -293,6 +302,52 @@ export async function sendMessage(formData: FormData) {
     }
   }
 
+  // DECLINATION (A8 edge 3.3 / Step 10) — the interviewee signals
+  // they don't want to participate. Deliver the verbatim graceful
+  // close, flip the session to 'declined', notify Joey. No push to
+  // continue. Runs after the Stacy interrupt, before the pause check —
+  // a decline is terminal, it is not a pause.
+  if (detectDeclineSignal(trimmed)) {
+    const supabaseDecline = getServiceRoleClient();
+    const declineElapsed = Math.floor(
+      (Date.now() - effectiveStartedAtMs) / 1000,
+    );
+    await appendApertureMessage({
+      sessionId: session.id,
+      turnIndex: intervieweeTurnIndex + 1,
+      text: DECLINE_LINE,
+      eventType: "acknowledgment",
+      elapsedSeconds: declineElapsed,
+    });
+    await supabaseDecline
+      .from("sessions")
+      .update({
+        status: "declined",
+        decline_reason: trimmed.slice(0, 2000),
+        last_activity_at: new Date().toISOString(),
+      })
+      .eq("id", session.id);
+    const declineEmail = await sendDeclineNotification(
+      { ...session, status: "declined" },
+      trimmed,
+    );
+    if (!declineEmail.ok) {
+      console.error(
+        "[sendMessage] decline notification failed:",
+        declineEmail.error,
+      );
+      await supabaseDecline
+        .from("sessions")
+        .update({
+          last_error:
+            `decline email failed: ${declineEmail.error}`.slice(0, 2000),
+        })
+        .eq("id", session.id);
+    }
+    revalidatePath(`/i/${token}/chat`);
+    return;
+  }
+
   // EXPLICIT PAUSE SIGNAL (Section XIII / Step 7) — the interviewee
   // says they need to step away. Deliver the verbatim pause line, flip
   // the session to 'paused', and snapshot elapsed. Their next message
@@ -373,20 +428,26 @@ export async function sendMessage(formData: FormData) {
   // Fire all three model calls in parallel. Extraction + scoring are
   // background work that doesn't block the user's reply, but we await
   // them here so the next page render has the updated rows.
-  const [opusResponse, extraction, scoring] = await Promise.all([
-    anthropic.messages.create({
-      model: APERTURE_CONVERSATION_MODEL,
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: anthropicMessages,
-    }),
-    extractEntitiesAndNumbers(trimmed),
-    scoreInterviewteeTurn({
-      intervieweeText: trimmed,
-      priorAgentQuestion: priorAgentText,
-      questionId: null,
-    }),
-  ]);
+  const [opusResponse, extraction, scoring, contradiction] =
+    await Promise.all([
+      anthropic.messages.create({
+        model: APERTURE_CONVERSATION_MODEL,
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: anthropicMessages,
+      }),
+      extractEntitiesAndNumbers(trimmed),
+      scoreInterviewteeTurn({
+        intervieweeText: trimmed,
+        priorAgentQuestion: priorAgentText,
+        questionId: null,
+      }),
+      // Layer 3 — contradiction check against the BI Brief (A7 §XI).
+      detectContradiction({
+        intervieweeText: trimmed,
+        priorAgentQuestion: priorAgentText,
+      }),
+    ]);
 
   const replyText = opusResponse.content
     .filter((block): block is Extract<typeof block, { type: "text" }> =>
@@ -449,6 +510,17 @@ export async function sendMessage(formData: FormData) {
             questionId: `TURN_${intervieweeTurnIndex}`,
             drivingMessageId: userMessageRow.id,
             elapsedSeconds: intervieweeElapsed,
+          }),
+        )
+      : Promise.resolve(),
+    // Layer 3 — log a contradiction row if the detector found one.
+    contradiction
+      ? supabase.from("contradictions").insert(
+          contradictionResultToInsert(contradiction, {
+            sessionId: session.id,
+            questionId: `TURN_${intervieweeTurnIndex}`,
+            triggeringMessageId: userMessageRow.id,
+            intervieweeStatement: trimmed,
           }),
         )
       : Promise.resolve(),

@@ -53,6 +53,33 @@ function fromAddress(): string {
   return process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 }
 
+function appBaseUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://aperture-skyfire.vercel.app"
+  );
+}
+
+// Branded header band for HTML emails — the Aperture logo (degrades to
+// alt text if a client blocks images) over the product-class line.
+function emailBrandHeader(): string {
+  return (
+    `<div style="text-align:center;padding:4px 0 18px;border-bottom:1px solid #e0ddd6;margin-bottom:22px">` +
+    `<img src="${appBaseUrl()}/branding/aperture.png" alt="Aperture" width="190" style="display:inline-block;width:190px;max-width:60%;height:auto" />` +
+    `<div style="font:600 10px/1 -apple-system,Segoe UI,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#57514c;margin-top:9px">Intelligence Agent</div>` +
+    `</div>`
+  );
+}
+
+// Quiet co-mark footer for HTML emails — text only, no image
+// dependency.
+function emailBrandFooter(): string {
+  return (
+    `<div style="text-align:center;border-top:1px solid #e0ddd6;margin-top:28px;padding-top:16px">` +
+    `<div style="font:10px/1.6 -apple-system,Segoe UI,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#9a948e">Built by eCommerce Inc. &middot; for SkyFire Energy</div>` +
+    `</div>`
+  );
+}
+
 // ---- formatting helpers ---------------------------------------------
 
 function escapeHtml(s: string): string {
@@ -109,9 +136,11 @@ export async function sendStartNotification(
     const text = `${lead}\n\n${meta}\n\n${tail}\n`;
     const html =
       `<div style="font-family:-apple-system,Segoe UI,Helvetica,sans-serif;color:#1a1a1a;max-width:640px">` +
+      emailBrandHeader() +
       `<p>${escapeHtml(lead)}</p>` +
       `<pre style="font:13px/1.6 ui-monospace,Menlo,monospace;background:#f5f5f3;padding:12px 14px;border-radius:6px">${escapeHtml(meta)}</pre>` +
       `<p style="color:#666;font-size:13px">${escapeHtml(tail)}</p>` +
+      emailBrandFooter() +
       `</div>`;
 
     const { data, error } = await getResend().emails.send({
@@ -296,7 +325,8 @@ function buildCompletionEmail(
 
   const html =
     `<div style="font-family:-apple-system,Segoe UI,Helvetica,sans-serif;color:#1a1a1a;max-width:680px;line-height:1.5">` +
-    `<h2 style="margin:0 0 4px">Aperture intake — complete transcript</h2>` +
+    emailBrandHeader() +
+    `<h2 style="margin:0 0 4px">Intake transcript — complete</h2>` +
     `<table style="font-size:13px;border-collapse:collapse;margin:8px 0 20px">${headerHtml}</table>` +
     `<h3 style="border-bottom:1px solid #e0ddd6;padding-bottom:4px">Transcript</h3>` +
     transcriptHtml +
@@ -304,6 +334,7 @@ function buildCompletionEmail(
     scorecardsHtml +
     `<h3 style="border-bottom:1px solid #e0ddd6;padding-bottom:4px;margin-top:28px">Signal appendix — contradictions (${contradictions.length})</h3>` +
     contradictionsHtml +
+    emailBrandFooter() +
     `</div>`;
 
   return { subject, text, html };

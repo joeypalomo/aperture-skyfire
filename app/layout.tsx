@@ -19,8 +19,9 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Aperture",
-  description: "Purpose-built for SkyFire Energy.",
+  title: "Aperture — Intelligence Agent",
+  description:
+    "Aperture — an intelligence agent purpose-built for SkyFire Energy.",
   robots: { index: false, follow: false },
 };
 

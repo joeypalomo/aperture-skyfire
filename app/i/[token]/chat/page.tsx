@@ -12,6 +12,8 @@ import { getInterviewee } from "@/config/interviewees";
 import { listMessages } from "@/lib/messages";
 import { Transcript } from "@/components/Transcript";
 import { MessageForm } from "@/components/MessageForm";
+import { BrandHeader } from "@/components/BrandHeader";
+import { BrandFooter } from "@/components/BrandFooter";
 
 export const dynamic = "force-dynamic";
 
@@ -54,11 +56,8 @@ export default async function ChatPage({ params }: ChatPageProps) {
 
   return (
     <main className="mx-auto max-w-prose px-6 py-12">
-      <header className="space-y-2 mb-10">
-        <h1 className="font-playfair text-4xl text-near">Aperture</h1>
-        <p className="font-sans text-[9pt] uppercase tracking-wide text-ash">
-          Purpose-built for SkyFire Energy
-        </p>
+      <header className="mb-10">
+        <BrandHeader variant="compact" />
         <hr className="border-t border-silver mt-4" />
       </header>
 
@@ -80,6 +79,8 @@ export default async function ChatPage({ params }: ChatPageProps) {
           Paused — send a message whenever you&rsquo;re ready to pick back up.
         </p>
       )}
+
+      <BrandFooter className="mt-16" />
     </main>
   );
 }

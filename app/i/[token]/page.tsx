@@ -18,6 +18,8 @@ import { redirect } from "next/navigation";
 import { resolveToken } from "@/lib/tokens";
 import { getInterviewee } from "@/config/interviewees";
 import { startConversation } from "./chat/actions";
+import { BrandHeader } from "@/components/BrandHeader";
+import { BrandFooter } from "@/components/BrandFooter";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +32,7 @@ export default async function IntakeTokenPage({ params }: PageProps) {
 
   if (result.kind === "not_found") {
     return (
-      <PageShell heading="Aperture">
+      <PageShell>
         <p>
           This link wasn&rsquo;t meant for you — looks like there&rsquo;s
           been a mix-up. Reach out to Joey directly and he&rsquo;ll get
@@ -42,7 +44,7 @@ export default async function IntakeTokenPage({ params }: PageProps) {
 
   if (result.kind === "expired") {
     return (
-      <PageShell heading="Aperture">
+      <PageShell>
         <p>
           This intake link has expired. Reach out to Joey directly if
           you&rsquo;d still like to participate.
@@ -57,7 +59,7 @@ export default async function IntakeTokenPage({ params }: PageProps) {
 
   if (session.status === "completed") {
     return (
-      <PageShell heading="Aperture">
+      <PageShell>
         <p>
           We closed the session, {displayName} — but if there&rsquo;s
           something to add, send it through Joey directly and he&rsquo;ll
@@ -69,7 +71,7 @@ export default async function IntakeTokenPage({ params }: PageProps) {
 
   if (session.status === "declined" || session.status === "abandoned") {
     return (
-      <PageShell heading="Aperture">
+      <PageShell>
         <p>
           Joey will be in touch directly if there&rsquo;s anything that
           needs a conversation. Take care.
@@ -92,7 +94,7 @@ export default async function IntakeTokenPage({ params }: PageProps) {
   // status === 'invited' — fresh welcome with the A7 §VI verbatim opening
   // and the Begin button.
   return (
-    <PageShell heading="Aperture">
+    <PageShell>
       <p>
         Hi {displayName} — I&rsquo;m Aperture, an intelligence-gathering
         agent Joey built specifically for the SkyFire engagement.
@@ -114,28 +116,20 @@ export default async function IntakeTokenPage({ params }: PageProps) {
   );
 }
 
-// Shared shell — Aperture wordmark, co-mark, content slot.
-function PageShell({
-  heading,
-  children,
-}: {
-  heading: string;
-  children: React.ReactNode;
-}) {
+// Shared shell — Aperture brand lockup, content slot, co-mark footer.
+function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-prose flex-col justify-center px-6 py-16">
-      <div className="space-y-8">
-        <header className="space-y-3">
-          <h1 className="font-playfair text-5xl text-near">{heading}</h1>
-          <p className="font-sans text-[9pt] uppercase tracking-wide text-ash">
-            Purpose-built for SkyFire Energy
-          </p>
-        </header>
-        <hr className="border-t border-silver" />
-        <section className="space-y-4 text-[14px] leading-body text-charcoal">
-          {children}
-        </section>
+    <main className="mx-auto flex min-h-screen max-w-prose flex-col px-6 py-12">
+      <div className="flex flex-1 flex-col justify-center">
+        <div className="space-y-8">
+          <BrandHeader variant="hero" />
+          <hr className="border-t border-silver" />
+          <section className="space-y-4 text-[14px] leading-body text-charcoal">
+            {children}
+          </section>
+        </div>
       </div>
+      <BrandFooter className="mt-12" />
     </main>
   );
 }

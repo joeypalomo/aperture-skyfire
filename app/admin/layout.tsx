@@ -21,13 +21,18 @@ export default async function AdminLayout({
     <div className="min-h-screen bg-white">
       <header className="border-b border-silver">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div className="space-y-0.5">
-            <h1 className="font-playfair text-2xl text-near">
-              Aperture admin
-            </h1>
-            <p className="font-sans text-[9pt] uppercase tracking-wide text-ash">
-              Purpose-built for SkyFire Energy
-            </p>
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/branding/aperture.png"
+              alt="Aperture"
+              width={111}
+              height={30}
+              className="h-[30px] w-auto"
+            />
+            <span className="border-l border-silver pl-3 font-sans text-[10px] uppercase tracking-[0.22em] text-ash">
+              Admin · Cohort console
+            </span>
           </div>
           {user && (
             <div className="flex items-center gap-4 text-[12px] text-ash">

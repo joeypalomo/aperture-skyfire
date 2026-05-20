@@ -140,6 +140,7 @@ const ACTIVE_STATUSES = [
  *     (Step 6).
  */
 export async function sendMessage(formData: FormData) {
+  try {
   const token = formData.get("token");
   const text = formData.get("text");
   if (typeof token !== "string") {
@@ -422,4 +423,37 @@ export async function sendMessage(formData: FormData) {
   ]);
 
   revalidatePath(`/i/${token}/chat`);
+  } catch (err) {
+    // Surface the real error into sessions.last_error (the column
+    // exists for exactly this) so failures are debuggable without
+    // Vercel log access. redirect()/notFound() throw control-flow
+    // errors that MUST pass through untouched.
+    const digest =
+      err && typeof err === "object" && "digest" in err
+        ? String((err as { digest?: unknown }).digest)
+        : "";
+    if (digest.startsWith("NEXT_REDIRECT") || digest === "NEXT_NOT_FOUND") {
+      throw err;
+    }
+    console.error("[sendMessage] uncaught:", err);
+    try {
+      const tok = formData.get("token");
+      if (typeof tok === "string") {
+        const r = await resolveToken(tok);
+        if (r.kind === "ok") {
+          await getServiceRoleClient()
+            .from("sessions")
+            .update({
+              last_error: String(
+                (err as { stack?: string })?.stack ?? err,
+              ).slice(0, 2000),
+            })
+            .eq("id", r.session.id);
+        }
+      }
+    } catch (logErr) {
+      console.error("[sendMessage] failed to persist last_error:", logErr);
+    }
+    throw err;
+  }
 }

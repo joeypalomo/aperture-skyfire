@@ -443,10 +443,7 @@ export async function sendMessage(formData: FormData) {
         questionId: null,
       }),
       // Layer 3 — contradiction check against the BI Brief (A7 §XI).
-      detectContradiction({
-        intervieweeText: trimmed,
-        priorAgentQuestion: priorAgentText,
-      }),
+      detectContradiction({ intervieweeText: trimmed }),
     ]);
 
   const replyText = opusResponse.content

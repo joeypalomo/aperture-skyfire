@@ -54,29 +54,40 @@ export interface ContradictionResult {
   followup_recommended: FollowupKind;
 }
 
-const SYSTEM_PROMPT = `You are a contradiction detector for the Aperture intake agent. Read one interviewee turn (with the prior agent question for context) and decide whether it MATERIALLY contradicts a documented fact in the SkyFire Business Intelligence Brief.
+const SYSTEM_PROMPT = `You are a contradiction detector for the Aperture intake agent. You are given ONE interviewee statement. Decide whether it MATERIALLY contradicts a documented fact in the SkyFire Business Intelligence Brief.
 
-A contradiction is the interviewee stating something that genuinely conflicts with a documented fact — a different dollar figure, count, timeline, ownership, or status for the SAME named thing. It is NOT a contradiction when the interviewee volunteers new information the Brief simply doesn't cover, or restates a documented fact in different words. Only flag a real conflict.
+You are checking ONLY the interviewee's own words. Flag a contradiction ONLY when ALL THREE of these hold:
+1. The interviewee makes a SPECIFIC, CONCRETE, CHECKABLE claim — a dollar figure, a count, a date or age, or a named entity's status/ownership.
+2. That claim is about the SAME specific thing a documented fact describes.
+3. The interviewee's specific value DIRECTLY conflicts with the documented value.
+
+It is NOT a contradiction when:
+- The interviewee gives an opinion, a self-assessment, or a vague characterization ("the discipline's fine," "it's going well," "I figured it out as I went").
+- The interviewee volunteers new information the Brief simply doesn't cover.
+- The interviewee restates a documented fact in different words, or says something consistent with it.
+- The conflict is loose, inferred, or requires you to assume what the interviewee meant.
+
+When in doubt, return contradicted: false. A false positive pollutes the operator's signal; a missed one is recoverable from the transcript. Bias hard toward false.
 
 Return ONLY a JSON object:
 
 {
   "contradicted": true | false,
-  "conflicting_known": "<the documented fact it conflicts with, quoted from the Brief below>",
+  "conflicting_known": "<the documented fact, quoted from the Brief below>",
   "source_of_known": "<the [chunk_id — source_section] label of that fact>",
   "severity": "minor" | "material" | "scope_affecting",
-  "agent_read": "<one or two sentences, operator voice — what the conflict means for Joey>",
+  "agent_read": "<one or two sentences, operator voice — quote the interviewee's specific conflicting claim and the documented value>",
   "followup_recommended": "no" | "yes_via_joey_separate_touch" | "yes_via_cross_intake_validation" | "yes_via_data_check" | "yes_via_joey_direct"
 }
 
-If there is NO contradiction, return {"contradicted": false} — the other fields may be omitted or empty.
+If there is no contradiction, return {"contradicted": false}.
 
 Severity:
 - minor — a small discrepancy that changes no conclusion.
 - material — a named entity, dollar figure, count, or timeline differs in a way that changes the economics or the read.
 - scope_affecting — the conflict bears on the engagement's scope or a constraint's validity.
 
-agent_read is operator voice — Joey's running shorthand, not a consultant summary. Forbidden: "this signals," "this underscores," "moving forward," "notably," "interestingly."
+agent_read is operator voice — Joey's running shorthand, not a consultant summary. It MUST quote the interviewee's actual conflicting words. Forbidden: "this signals," "this underscores," "moving forward," "notably," "interestingly."
 
 followup_recommended is normally "yes_via_joey_direct" when the interviewee is the ground-truth source on the contradicted fact (the Brief may be stale), or "yes_via_data_check" when the data should be independently verified.
 
@@ -104,18 +115,13 @@ function safeEnum<T extends string>(
  */
 export async function detectContradiction(args: {
   intervieweeText: string;
-  priorAgentQuestion: string | null;
 }): Promise<ContradictionResult | null> {
   const anthropic = getAnthropicClient();
 
-  const userMsg = [
-    args.priorAgentQuestion
-      ? `Prior agent question:\n"${args.priorAgentQuestion}"\n`
-      : "",
-    `Interviewee answer:\n"${args.intervieweeText}"`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  // Only the interviewee's own words — the prior agent question is
+  // deliberately NOT passed, so facts or numbers stated IN the
+  // question can't be misattributed to the interviewee.
+  const userMsg = `Interviewee statement:\n"${args.intervieweeText}"`;
 
   try {
     const response = await anthropic.messages.create({

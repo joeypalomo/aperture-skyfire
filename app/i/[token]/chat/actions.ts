@@ -30,6 +30,7 @@ import {
   RESUME_GAP_SECONDS,
   RESUME_CONTEXT_BLOCK,
 } from "@/lib/pause";
+import { sendStartNotification, sendCompletionEmail } from "@/lib/email";
 
 /**
  * Compute the verbatim A7 §VI opening for a given display name.
@@ -99,6 +100,20 @@ export async function startConversation(formData: FormData) {
     elapsedSeconds: 0,
   });
 
+  // Step 8 — notify Joey the interviewee opened their intake.
+  // Best-effort: a failed notification must not block the Begin flow.
+  const startEmail = await sendStartNotification({
+    ...session,
+    status: "identifying",
+    started_at: now.toISOString(),
+  });
+  if (!startEmail.ok) {
+    console.error(
+      "[startConversation] start notification failed:",
+      startEmail.error,
+    );
+  }
+
   revalidatePath(`/i/${token}`);
   revalidatePath(`/i/${token}/chat`);
   redirect(`/i/${token}/chat`);
@@ -114,6 +129,18 @@ const ACTIVE_STATUSES = [
   // to an in-progress value (Step 7).
   "paused",
 ] as const;
+
+// COMPLETION DETECTION (Step 8). A7 §XV makes the final line verbatim;
+// these invariant fragments (display-name- and budget-free) detect it
+// deterministically — the same pattern as the pause/Stacy safeguards.
+const FINAL_LINE_PATTERNS: RegExp[] = [
+  /that'?s everything i had/i,
+  /joey will be in touch directly on anything that needs a real conversation/i,
+];
+
+function detectFinalLine(text: string): boolean {
+  return FINAL_LINE_PATTERNS.some((p) => p.test(text));
+}
 
 /**
  * Interviewee submits a message. Persists it, runs the three-layer
@@ -372,19 +399,27 @@ export async function sendMessage(formData: FormData) {
     throw new Error("sendMessage: Anthropic returned empty reply");
   }
 
+  // Step 8 — completion detection. If Opus delivered the §XV final
+  // line, this turn ends the interview.
+  const isFinalLine = detectFinalLine(replyText);
+
   const replyElapsed = Math.floor(
     (Date.now() - effectiveStartedAtMs) / 1000,
   );
 
   // Persist agent reply. retrieval_chunks_used records which Brief
   // chunks Aperture saw silently for this turn — audit trail for
-  // synthesis QA. On a resuming turn the reply opens with the §XIII
-  // welcome-back greeting, so it's classified as resume_greeting.
+  // synthesis QA. Event type: final_line ends the interview;
+  // resume_greeting opens a post-pause turn; else question_primary.
   const agentMessageRow = await appendApertureMessage({
     sessionId: session.id,
     turnIndex: intervieweeTurnIndex + 1,
     text: replyText,
-    eventType: isResume ? "resume_greeting" : "question_primary",
+    eventType: isFinalLine
+      ? "final_line"
+      : isResume
+        ? "resume_greeting"
+        : "question_primary",
     elapsedSeconds: replyElapsed,
   });
 
@@ -421,6 +456,44 @@ export async function sendMessage(formData: FormData) {
       .update({ last_activity_at: new Date().toISOString() })
       .eq("id", session.id),
   ]);
+
+  // Step 8 — interview complete. Flip the session to 'completed' and
+  // email Joey the full transcript + signal appendix.
+  // final_line_delivered guards a double-send. Best-effort: an email
+  // failure is logged but must not fail the interviewee's final turn.
+  if (isFinalLine && !session.final_line_delivered) {
+    const completedAt = new Date().toISOString();
+    await supabase
+      .from("sessions")
+      .update({
+        status: "completed",
+        completed_at: completedAt,
+        final_line_delivered: true,
+        closing_completed: true,
+      })
+      .eq("id", session.id);
+
+    const completionEmail = await sendCompletionEmail({
+      ...session,
+      status: "completed",
+      completed_at: completedAt,
+      final_line_delivered: true,
+      closing_completed: true,
+    });
+    if (!completionEmail.ok) {
+      console.error(
+        "[sendMessage] completion email failed:",
+        completionEmail.error,
+      );
+      await supabase
+        .from("sessions")
+        .update({
+          last_error:
+            `completion email failed: ${completionEmail.error}`.slice(0, 2000),
+        })
+        .eq("id", session.id);
+    }
+  }
 
   revalidatePath(`/i/${token}/chat`);
   } catch (err) {

@@ -31,6 +31,10 @@ interface BuildOptions {
   /** Optional Layer 2 retrieved-context block (lib/retrieval.ts).
    *  Appended after Section VIII when provided. Step 5+. */
   retrievedContextBlock?: string;
+  /** Optional resume-context block (lib/pause.ts). Injected after
+   *  Section XIII on a turn where the interviewee is returning from a
+   *  pause, so Opus opens with the §XIII welcome-back greeting. Step 7. */
+  resumeContext?: string;
 }
 
 /**
@@ -78,10 +82,16 @@ export function buildSystemPrompt(
     SECTION_XI,
     SECTION_XII,
     SECTION_XIII,
-    SECTION_XIV,
-    SECTION_XV,
-    SECTION_XVI,
   );
+
+  // Resume context slots in directly after Section XIII — it's a
+  // runtime annotation of the §XIII "INTERVIEWEE RETURNS AFTER A
+  // PAUSE" rule, present only on a resuming turn.
+  if (options.resumeContext && options.resumeContext.length > 0) {
+    sections.push(options.resumeContext);
+  }
+
+  sections.push(SECTION_XIV, SECTION_XV, SECTION_XVI);
 
   return sections.join("\n\n");
 }

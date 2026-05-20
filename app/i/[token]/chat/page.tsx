@@ -74,6 +74,12 @@ export default async function ChatPage({ params }: ChatPageProps) {
           Session ended. Reach out to Joey directly if there's anything to add.
         </p>
       )}
+
+      {session.status === "paused" && (
+        <p className="mt-6 text-[12px] italic text-ash text-center">
+          Paused — send a message whenever you&rsquo;re ready to pick back up.
+        </p>
+      )}
     </main>
   );
 }

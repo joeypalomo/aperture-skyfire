@@ -24,6 +24,12 @@ import { extractEntitiesAndNumbers } from "@/lib/extraction";
 import { scoreInterviewteeTurn, scoreResultToInsert } from "@/lib/scoring";
 import { lookupChunks, renderRetrievedContextBlock } from "@/lib/retrieval";
 import { checkStacyHardInterrupt } from "@/lib/safeguards";
+import {
+  detectPauseSignal,
+  PAUSE_LINE,
+  RESUME_GAP_SECONDS,
+  RESUME_CONTEXT_BLOCK,
+} from "@/lib/pause";
 
 /**
  * Compute the verbatim A7 §VI opening for a given display name.
@@ -103,6 +109,10 @@ const ACTIVE_STATUSES = [
   "warm",
   "core",
   "closing",
+  // 'paused' is active: a paused session resumes when the interviewee
+  // sends their next message. Resume detection below flips status back
+  // to an in-progress value (Step 7).
+  "paused",
 ] as const;
 
 /**
@@ -160,8 +170,53 @@ export async function sendMessage(formData: FormData) {
   }
 
   const startedAtMs = new Date(session.started_at).getTime();
+
+  // PAUSE / RESUME DETECTION (Step 7). Aperture has no live timer — a
+  // pause is recognized on the interviewee's RETURN. This turn is a
+  // resume if the session was explicitly paused, OR the gap since last
+  // activity exceeds the 30-minute threshold. On a resume we shift
+  // started_at forward by the paused duration so elapsed interview
+  // time excludes the gap, and inject the §XIII welcome-back greeting
+  // into the system prompt.
+  const lastActivityMs = session.last_activity_at
+    ? new Date(session.last_activity_at).getTime()
+    : startedAtMs;
+  const gapSeconds = Math.floor((Date.now() - lastActivityMs) / 1000);
+  const isResume =
+    session.status === "paused" || gapSeconds > RESUME_GAP_SECONDS;
+
+  let effectiveStartedAtMs = startedAtMs;
+  if (isResume) {
+    // Paused duration: from the explicit pause instant if we have one,
+    // else the whole inactivity gap.
+    const pauseAnchorMs = session.paused_at
+      ? new Date(session.paused_at).getTime()
+      : lastActivityMs;
+    const pauseDurationMs = Math.max(0, Date.now() - pauseAnchorMs);
+    effectiveStartedAtMs = startedAtMs + pauseDurationMs;
+
+    // Persist the shift immediately. Updating status off 'paused' and
+    // last_activity_at to now makes a retry-after-failure re-detect
+    // isResume=false, so the started_at shift can't double-apply.
+    // started_at now means "virtual start such that (now - started_at)
+    // = active interview seconds"; created_at remains the true
+    // creation time.
+    const supabaseResume = getServiceRoleClient();
+    await supabaseResume
+      .from("sessions")
+      .update({
+        started_at: new Date(effectiveStartedAtMs).toISOString(),
+        status: "core",
+        paused_at: null,
+        last_activity_at: new Date().toISOString(),
+      })
+      .eq("id", session.id);
+  }
+
   const intervieweeTurnIndex = await nextTurnIndex(session.id);
-  const intervieweeElapsed = Math.floor((Date.now() - startedAtMs) / 1000);
+  const intervieweeElapsed = Math.floor(
+    (Date.now() - effectiveStartedAtMs) / 1000,
+  );
 
   const userMessageRow = await appendIntervieweeMessage({
     sessionId: session.id,
@@ -179,7 +234,7 @@ export async function sendMessage(formData: FormData) {
     if (safeguard.triggered) {
       const supabaseSafe = getServiceRoleClient();
       const reAnchorElapsed = Math.floor(
-        (Date.now() - startedAtMs) / 1000,
+        (Date.now() - effectiveStartedAtMs) / 1000,
       );
       await appendApertureMessage({
         sessionId: session.id,
@@ -207,6 +262,49 @@ export async function sendMessage(formData: FormData) {
       revalidatePath(`/i/${token}/chat`);
       return;
     }
+  }
+
+  // EXPLICIT PAUSE SIGNAL (Section XIII / Step 7) — the interviewee
+  // says they need to step away. Deliver the verbatim pause line, flip
+  // the session to 'paused', and snapshot elapsed. Their next message
+  // is detected as a resume by the block above. Runs after the Stacy
+  // interrupt (which §XIV mandates fires first) but before the Opus
+  // pipeline — no model call needed for a deterministic pause.
+  if (detectPauseSignal(trimmed)) {
+    const supabasePause = getServiceRoleClient();
+    const pauseElapsed = Math.floor(
+      (Date.now() - effectiveStartedAtMs) / 1000,
+    );
+    await appendApertureMessage({
+      sessionId: session.id,
+      turnIndex: intervieweeTurnIndex + 1,
+      text: PAUSE_LINE,
+      eventType: "pause_response",
+      elapsedSeconds: pauseElapsed,
+    });
+    await supabasePause
+      .from("sessions")
+      .update({
+        status: "paused",
+        paused_at: new Date().toISOString(),
+        elapsed_seconds_at_pause: pauseElapsed,
+        last_activity_at: new Date().toISOString(),
+      })
+      .eq("id", session.id);
+    // Log the pause in the user's message notes for synthesis.
+    await supabasePause
+      .from("messages")
+      .update({
+        notes: [
+          {
+            type: "PAUSE_SIGNAL",
+            content: `Explicit pause detected — session paused at elapsed ${pauseElapsed}s.`,
+          },
+        ],
+      })
+      .eq("id", userMessageRow.id);
+    revalidatePath(`/i/${token}/chat`);
+    return;
   }
 
   // Build conversation history (includes the just-saved user message).
@@ -238,6 +336,7 @@ export async function sendMessage(formData: FormData) {
 
   const systemPrompt = buildSystemPrompt(session, {
     retrievedContextBlock,
+    resumeContext: isResume ? RESUME_CONTEXT_BLOCK : undefined,
   });
 
   const anthropic = getAnthropicClient();
@@ -272,16 +371,19 @@ export async function sendMessage(formData: FormData) {
     throw new Error("sendMessage: Anthropic returned empty reply");
   }
 
-  const replyElapsed = Math.floor((Date.now() - startedAtMs) / 1000);
+  const replyElapsed = Math.floor(
+    (Date.now() - effectiveStartedAtMs) / 1000,
+  );
 
   // Persist agent reply. retrieval_chunks_used records which Brief
   // chunks Aperture saw silently for this turn — audit trail for
-  // synthesis QA.
+  // synthesis QA. On a resuming turn the reply opens with the §XIII
+  // welcome-back greeting, so it's classified as resume_greeting.
   const agentMessageRow = await appendApertureMessage({
     sessionId: session.id,
     turnIndex: intervieweeTurnIndex + 1,
     text: replyText,
-    eventType: "question_primary",
+    eventType: isResume ? "resume_greeting" : "question_primary",
     elapsedSeconds: replyElapsed,
   });
 

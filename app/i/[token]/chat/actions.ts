@@ -23,6 +23,7 @@ import {
 import { extractEntitiesAndNumbers } from "@/lib/extraction";
 import { scoreInterviewteeTurn, scoreResultToInsert } from "@/lib/scoring";
 import { lookupChunks, renderRetrievedContextBlock } from "@/lib/retrieval";
+import { checkStacyHardInterrupt } from "@/lib/safeguards";
 
 /**
  * Compute the verbatim A7 §VI opening for a given display name.
@@ -169,6 +170,45 @@ export async function sendMessage(formData: FormData) {
     elapsedSeconds: intervieweeElapsed,
   });
 
+  // STACY HARD INTERRUPT (A7 §XIV) — fires BEFORE Opus call when the
+  // interviewee drifts into marketing-strategy territory. Per A7
+  // Decision 6, this is the central architectural defense; the
+  // verbatim re-anchor replaces what Opus would have said.
+  if (session.interviewee_id === "stacy_haakonson") {
+    const safeguard = await checkStacyHardInterrupt(trimmed);
+    if (safeguard.triggered) {
+      const supabaseSafe = getServiceRoleClient();
+      const reAnchorElapsed = Math.floor(
+        (Date.now() - startedAtMs) / 1000,
+      );
+      await appendApertureMessage({
+        sessionId: session.id,
+        turnIndex: intervieweeTurnIndex + 1,
+        text: safeguard.reAnchorText,
+        eventType: "re_anchor",
+        elapsedSeconds: reAnchorElapsed,
+      });
+      // Log the safeguard fire in the user's message notes for synthesis.
+      await supabaseSafe
+        .from("messages")
+        .update({
+          notes: [
+            {
+              type: "RE_ANCHOR_FIRED",
+              content: `Stacy hard interrupt — detected by ${safeguard.detectedBy} (signal: "${safeguard.matchedSignal}")`,
+            },
+          ],
+        })
+        .eq("id", userMessageRow.id);
+      await supabaseSafe
+        .from("sessions")
+        .update({ last_activity_at: new Date().toISOString() })
+        .eq("id", session.id);
+      revalidatePath(`/i/${token}/chat`);
+      return;
+    }
+  }
+
   // Build conversation history (includes the just-saved user message).
   const history = await listMessages(session.id);
   const anthropicMessages = toAnthropicMessages(history);
@@ -261,10 +301,12 @@ export async function sendMessage(formData: FormData) {
       ? supabase.from("scorecards").insert(
           scoreResultToInsert(scoring, {
             sessionId: session.id,
-            // Step 5 placeholder — Step 6 wires real per-stakeholder
-            // question routing. Use the driving message id so the
-            // scorecard row is uniquely keyed to the answer it
-            // scored.
+            // Step 6: question_id is still keyed off turn index until
+            // the state machine wires session.current_question_id from
+            // the registry. The library is now loaded into the system
+            // prompt, but routing the next question_id per turn
+            // requires Opus output parsing (deferred — system prompt
+            // handles flow logic on its own).
             questionId: `TURN_${intervieweeTurnIndex}`,
             drivingMessageId: userMessageRow.id,
             elapsedSeconds: intervieweeElapsed,

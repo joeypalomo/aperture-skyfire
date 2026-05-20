@@ -1,55 +1,124 @@
 // Section VII — Question Library. Templated per session per A7.
 //
-// Step 4 ships a MINIMAL STUB: a single generic warm question plus
-// the universal closing. This is enough to exercise the conversation
-// engine end-to-end (opening → warm → ack → closing → final line)
-// without committing to per-stakeholder content yet.
-//
-// Step 6 replaces this entire function with per-interviewee content
-// loaded verbatim from Phase 2 Artifacts 3 (Tier 1 Dave/Greg),
-// 4 (Tier 2 Landon/Jason/Curtis), and 5 (Tier 3 Robert/Bryce/Stacy)
-// — including per-question probe-downs, substantive-vs-thin
-// heuristics, time estimates, branching rules, and per-interviewee
-// calibrated closing variants.
+// Step 6: renders the full per-stakeholder library from
+// config/questions/<interviewee>.ts (verbatim warm + question
+// sequence with probe-downs + closing variant + branching rules).
+// If no library is loaded for an interviewee (shouldn't happen in
+// the SkyFire cohort, but defensive), falls back to the Step 4 stub
+// shape (one generic warm + universal closing) so the system prompt
+// always renders.
 
 import type { IntervieweeConfig } from "@/config/interviewees";
+import { getQuestionLibrary } from "@/config/questions";
+import type {
+  IntervieweeQuestionLibrary,
+  Question,
+} from "@/config/questions/types";
 
-export function buildSection7(config: IntervieweeConfig): string {
+function renderQuestion(q: Question): string {
+  const probesBlock = q.probes
+    .map((p, i) => {
+      const label = i === 0 ? "Primary" : `Alternate ${i}`;
+      return `  - ${label}: "${p.text}"\n    When: ${p.when}`;
+    })
+    .join("\n");
+
+  return `${q.id} [${q.priority}] — ${q.title}
+
+AGENT DELIVERS (verbatim):
+"${q.text}"
+
+WHY: ${q.why}
+
+CONSTRAINTS TESTED: ${q.constraints_tested.join(", ")}
+
+PROBE-DOWN (one-shot only — fire only if answer is thin):
+${probesBlock}
+
+SUBSTANTIVE-VS-THIN HEURISTIC:
+  Substantive if: ${q.substantive_markers}
+  Thin if: ${q.thin_markers}
+
+TIME ESTIMATE:
+  Primary alone: ${q.time_estimate_seconds.primary} seconds
+  With probe-down: ${q.time_estimate_seconds.with_probe} seconds`;
+}
+
+function renderLibrary(lib: IntervieweeQuestionLibrary): string {
+  const questionsBlock = lib.questions
+    .map((q) => renderQuestion(q))
+    .join("\n\n");
+
   return `──────────────────────────────────────────────────────
 SECTION VII — QUESTION LIBRARY
 ──────────────────────────────────────────────────────
-
-[Step 4 development build — single warm + universal closing only.
-Per-stakeholder verbatim content from Phase 2 Artifacts 3, 4, 5
-lands in Step 6 of the build.]
 
 === OPENING WARM ===
 
 After Stage 1 acknowledgment, deliver this verbatim:
 
-"What's on your mind about the SkyFire commercial sales engine right
-now? Anything operational, anything you've been thinking about."
+"${lib.warm.text}"
 
-Expected answer shape: 30–60 seconds, any substantive observation.
-If thin: acknowledge with two to five words, proceed to the closing.
-No probe on the warm.
+Expected answer shape: ${lib.warm.expected_shape}
+Target duration: ${lib.warm.target_seconds} seconds
+If thin: acknowledge with two to five words, proceed to Q1. No probe.
 
 === QUESTION SEQUENCE ===
 
-[Empty for Step 4. Step 6 loads the full per-interviewee registry
-from Phase 2 Artifact ${config.tier === 1 ? "3" : config.tier === 2 ? "4" : "5"}.
-For Step 4, after the warm acknowledgment, transition directly to the
-closing question.]
+${questionsBlock}
+
+=== BRANCHING LOGIC ===
+
+${lib.branching_rules}
 
 === CLOSING QUESTION ===
 
-After the warm completes (no other questions in this Step 4 stub),
-deliver verbatim:
+After the registry completes (Stage 4 trigger), deliver verbatim:
+
+"${lib.closing.text}"
+
+The "and what would change downstream" tail is the design — never trim,
+soften, or replace it. The response is the response — no probe after
+the closing.
+
+=== VOICE REGISTER NOTES (per this interviewee) ===
+
+${lib.voice_register_notes}
+
+=== WATCH-OUTS / LANE CONSIDERATIONS (per this interviewee) ===
+
+${lib.watch_outs}
+
+=== TRIM SEQUENCE UNDER BUDGET PRESSURE ===
+
+In order: ${lib.trim_sequence.join(" → ")}`;
+}
+
+function renderStub(config: IntervieweeConfig): string {
+  // Fallback for unregistered interviewees — should never fire in
+  // the SkyFire cohort, but defensive against config mismatch.
+  return `──────────────────────────────────────────────────────
+SECTION VII — QUESTION LIBRARY
+──────────────────────────────────────────────────────
+
+[Question library not loaded for interviewee_id=${config.id}.
+Deliver the warm below, acknowledge, then deliver the universal
+closing.]
+
+=== OPENING WARM ===
+
+"What's on your mind about the SkyFire commercial sales engine right
+now?"
+
+=== CLOSING QUESTION ===
 
 "If you could change one thing about how SkyFire wins (or doesn't
 win) commercial deals — one thing, not three — what would you
-change, and what would change downstream?"
+change, and what would change downstream?"`;
+}
 
-No probe after the closing. The "and what would change downstream"
-tail is non-negotiable per Section XV. The response is the response.`;
+export function buildSection7(config: IntervieweeConfig): string {
+  const lib = getQuestionLibrary(config.id);
+  if (!lib) return renderStub(config);
+  return renderLibrary(lib);
 }

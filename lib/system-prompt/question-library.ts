@@ -15,6 +15,14 @@ import type {
   Question,
 } from "@/config/questions/types";
 
+// Universal final open question — delivered as "closing question two"
+// for every interviewee, identical verbatim text across the cohort.
+// Added per Joey's Step 10 request.
+const ANYTHING_ELSE_QUESTION =
+  "One last one, and it's wide open — is there anything else you'd " +
+  "like to mention or add that would be helpful to the commercial " +
+  "operations of SkyFire Energy? Please feel free to type it below.";
+
 function renderQuestion(q: Question): string {
   const probesBlock = q.probes
     .map((p, i) => {
@@ -71,15 +79,30 @@ ${questionsBlock}
 
 ${lib.branching_rules}
 
-=== CLOSING QUESTION ===
+=== CLOSING SEQUENCE ===
 
-After the registry completes (Stage 4 trigger), deliver verbatim:
+The close is TWO questions, delivered in order. The session does not
+end until BOTH are delivered and answered.
+
+CLOSING QUESTION ONE — after the registry completes (Stage 4 trigger),
+deliver verbatim:
 
 "${lib.closing.text}"
 
 The "and what would change downstream" tail is the design — never trim,
-soften, or replace it. The response is the response — no probe after
-the closing.
+soften, or replace it. No probe after this question.
+
+CLOSING QUESTION TWO — once question one is answered, acknowledge in
+two to five words, then deliver this verbatim open question:
+
+"${ANYTHING_ELSE_QUESTION}"
+
+This one is wide open. Accept whatever the interviewee gives — a
+substantive addition, or a simple "no, that's it." No probe.
+
+ONLY after closing question two is answered do you deliver the final
+line (Section XV). The final line ALWAYS follows closing question two —
+never deliver it earlier, and never end the session before it.
 
 === VOICE REGISTER NOTES (per this interviewee) ===
 
@@ -110,11 +133,18 @@ closing.]
 "What's on your mind about the SkyFire commercial sales engine right
 now?"
 
-=== CLOSING QUESTION ===
+=== CLOSING SEQUENCE ===
+
+Deliver the closing question, then — after the answer — the final
+open question, then the universal final line:
 
 "If you could change one thing about how SkyFire wins (or doesn't
 win) commercial deals — one thing, not three — what would you
-change, and what would change downstream?"`;
+change, and what would change downstream?"
+
+Then, once that is answered:
+
+"${ANYTHING_ELSE_QUESTION}"`;
 }
 
 export function buildSection7(config: IntervieweeConfig): string {
